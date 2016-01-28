@@ -16,6 +16,7 @@ var Deferral = function(){
 
 $Promise.prototype.state = "pending";
 
+
 Deferral.prototype.resolve = function(data){
 	if(this.$promise.state === 'pending'){
 		this.$promise.value = data;
@@ -23,7 +24,13 @@ Deferral.prototype.resolve = function(data){
 	}
 
 	for(var x = 0; x < this.$promise.handlerGroups.length; x++){
-		this.$promise.handlerGroups[x].successCb(this.$promise.value);
+		if(this.$promise.handlerGroups[x].successCb !== null){
+			this.$promise.handlerGroups[x].successCb(this.$promise.value);
+		}
+		// else{
+		// 	this.$promise.handlerGroups[x].resolve(data)
+		// }
+
 	}
 	this.$promise.handlerGroups = [];
 }
@@ -40,30 +47,32 @@ Deferral.prototype.reject = function(reason){
 	this.$promise.handlerGroups = [];
 }
 
+
+
 var defer = function(){
 	var newdefer = new Deferral;
 	newdefer.$promise = new $Promise;
 	newdefer.$promise.handlerGroups = [];
+
+	newdefer.$promise.catch = function(func){
+		this.then(null, func);
+	}
 	newdefer.$promise.then = function(success, error){
-		console.log("test", success, error);
 		if((typeof success === 'function' || success === null) && (typeof error === 'function' || typeof error === 'undefined')){
-				this.handlerGroups.push({ ['successCb']: success, ['errorCb']: error});
+				this.handlerGroups.push({ ['successCb']: success, ['errorCb']: error, forwarder: defer()});
 		} else {
-			this.handlerGroups.push({ ['successCb']: null, ['errorCb']: null});
+			this.handlerGroups.push({ ['successCb']: null, ['errorCb']: null, forwarder: defer()});
 		}
 
 		if(newdefer.$promise.state === 'resolved') {
-			this.handlerGroups[this.handlerGroups.length-1].successCb(newdefer.$promise.value);
-			this.handlerGroups.pop();
+			this.handlerGroups[this.handlerGroups.length-1].successCb(newdefer.$promise.value);	
 		}
 
 		if(newdefer.$promise.state === 'rejected' && this.handlerGroups[this.handlerGroups.length-1].errorCb !== undefined) {
 			this.handlerGroups[this.handlerGroups.length-1].errorCb(newdefer.$promise.value);
-			this.handlerGroups.pop();
 		}
-	}
-	newdefer.$promise.catch = function(func){
-		this.then(null, func);
+		
+		return this.handlerGroups[this.handlerGroups.length-1].forwarder.$promise;
 	}
 	return newdefer;
 }

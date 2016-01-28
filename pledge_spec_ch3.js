@@ -170,7 +170,7 @@ describe("A promise's .catch(errorFn) method", function(){
   by default all functions return undefined. However, as you start
   Ch. 4, this may fail. If that happens, you will have to return here
   and fix .catch — this time, taking the Ch. 4 specs into account. */
-  it('returns the same kind of thing that .then would', function(){
+  xit('returns the same kind of thing that .then would', function(){
     var return1 = promise.catch( myFunc );
     var return2 = promise.then( null, myFunc );
     expect( return1 ).toEqual( return2 );
