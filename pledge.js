@@ -6,76 +6,88 @@ Promises Workshop: build the pledge.js deferral-style promise library
 
 
 var $Promise = function(){
-
-
+	this.state = "pending";
 }
 
 var Deferral = function(){
-
+	this.$promise = new $Promise;
+	this.$promise.handlerGroups = [];
+	this.$promise.value;
 }
 
-$Promise.prototype.state = "pending";
+function defer(){
+	return new Deferral;
+}
 
+function settle(state, value){
+	if(this.$promise.state === 'pending'){
+		this.$promise.state = state;
+		this.$promise.value = value;
+		this.$promise.callHandlers();
+	}
+}
+
+function isFn(maybeFn){
+	return typeof maybeFn === 'function';
+}
 
 Deferral.prototype.resolve = function(data){
-	if(this.$promise.state === 'pending'){
-		this.$promise.value = data;
-		this.$promise.state = 'resolved';
-	}
-
-	for(var x = 0; x < this.$promise.handlerGroups.length; x++){
-		if(this.$promise.handlerGroups[x].successCb !== null){
-			this.$promise.handlerGroups[x].successCb(this.$promise.value);
-		}
-		// else{
-		// 	this.$promise.handlerGroups[x].resolve(data)
-		// }
-
-	}
-	this.$promise.handlerGroups = [];
+	settle.call(this, 'resolved', data);
 }
 
 Deferral.prototype.reject = function(reason){
-	if(this.$promise.state === 'pending'){
-		this.$promise.value = reason;
-		this.$promise.state = 'rejected';
-	}
-
-	for(var x = 0; x < this.$promise.handlerGroups.length; x++){
-		this.$promise.handlerGroups[x].errorCb(this.$promise.value);
-	}
-	this.$promise.handlerGroups = [];
+	settle.call(this, 'rejected', reason);
 }
 
-
-
-var defer = function(){
-	var newdefer = new Deferral;
-	newdefer.$promise = new $Promise;
-	newdefer.$promise.handlerGroups = [];
-
-	newdefer.$promise.catch = function(func){
-		this.then(null, func);
-	}
-	newdefer.$promise.then = function(success, error){
-		if((typeof success === 'function' || success === null) && (typeof error === 'function' || typeof error === 'undefined')){
-				this.handlerGroups.push({ ['successCb']: success, ['errorCb']: error, forwarder: defer()});
-		} else {
-			this.handlerGroups.push({ ['successCb']: null, ['errorCb']: null, forwarder: defer()});
-		}
-
-		if(newdefer.$promise.state === 'resolved') {
-			this.handlerGroups[this.handlerGroups.length-1].successCb(newdefer.$promise.value);	
-		}
-
-		if(newdefer.$promise.state === 'rejected' && this.handlerGroups[this.handlerGroups.length-1].errorCb !== undefined) {
-			this.handlerGroups[this.handlerGroups.length-1].errorCb(newdefer.$promise.value);
-		}
-		
-		return this.handlerGroups[this.handlerGroups.length-1].forwarder.$promise;
-	}
-	return newdefer;
+$Promise.prototype.then = function(successCb, errorCb){
+	var newGroup = {
+		successCb: isFn(successCb) ? successCb: null,
+		errorCb: isFn(errorCb) ? errorCb : null,
+		forwarder: new Deferral
+	};
+	this.handlerGroups.push(newGroup);
+	this.callHandlers();
+	return newGroup.forwarder.$promise;
 }
+
+$Promise.prototype.callHandlers = function(){
+	if(this.state === 'pending') return;
+	var handler,
+		output;
+	this.handlerGroups.forEach(function(group){
+		handler = (this.state === 'resolved') ?
+			group.successCb :
+			group.errorCb;
+			if(!handler){
+				if(this.state === 'resolved'){ 
+					group.forwarder.resolve(this.value);
+				}
+				else group.forwarder.reject(this.value);
+			}
+			else {
+				try{
+					output = handler(this.value);
+					if(output instanceof $Promise){
+						output.then(function(val){
+							group.forwarder.resolve(val);
+						}).then(null, function(err){
+							group.forwarder.reject(err);
+						})
+					} else{
+						group.forwarder.resolve(output);
+					}
+				} catch(err){
+					group.forwarder.reject(err)
+				}
+			}
+	}.bind(this));
+	this.handlerGroups = [];
+}
+
+$Promise.prototype.catch = function(err){
+	return this.then(null, err);
+}
+
 
 
 
